@@ -1,23 +1,24 @@
 name: CD pipeline
 
 on:
-  push:
-    branches:
-      - main
+  workflow_run:
+    workflows: ["CI pipeline"]
+    types:
+      - completed
 
 jobs:
   Deploy:
     runs-on: self-hosted
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Pull Docker image
-        run: sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/calculator-app:v1
+      - name: Apply Kubernetes Configurations to Minikube
+        run: |
+          kubectl apply -f deployment.yaml
 
-      # Remove the pulled docker container if it exists
-      - name: Delete Docker container
-        run: docker rm -f calculator-app || true
-
-      - name: Run Docker container
-        run: sudo docker container run --detach --publish 5000:5000 --name calculator-app ${{ secrets.DOCKERHUB_USERNAME }}/calculator-app:v1
+      - name: Trigger Rollout Restart for New Image
+        run: |
+          kubectl rollout restart deployment/calculator-app
+          kubectl rollout status deployment/calculator-app
